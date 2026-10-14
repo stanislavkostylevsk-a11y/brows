@@ -128,16 +128,6 @@ export default function OrderModal({ isOpen, onClose, onOpenLegal }: OrderModalP
                   <ArrowRight className="w-4 h-4" />
                 </a>
 
-                <a
-                  href={AUTHOR_INFO.telegramUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3 px-4 rounded-xl bg-[#2AABEE] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:brightness-105 transition-all shadow-xs"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Открыть закрытый Telegram-канал</span>
-                </a>
-
                 <button
                   onClick={onClose}
                   className="w-full py-2.5 px-4 rounded-xl bg-white border border-[#D8C7B5] text-[#251D17] text-xs font-semibold hover:bg-[#FAF7F2] transition-colors"
