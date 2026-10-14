@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Check, Sparkles, Clock, ShieldCheck, ArrowRight, Send, BookOpen, Video } from 'lucide-react';
 import { TARIFFS } from '../data/courseData';
+import { ROBOKASSA_CONFIG } from '../services/robokassa';
 import Logo from './Logo';
 
 interface TariffsSectionProps {
@@ -135,13 +136,35 @@ export default function TariffsSection({ onSelectTariff }: TariffsSectionProps) 
               <button
                 id="tariff-single-buy-btn"
                 onClick={() => onSelectTariff(singleTariff.id)}
-                className="w-full py-4 px-6 rounded-xl font-bold text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg bg-[#FAF7F2] hover:bg-white text-[#1C1714] active:scale-[0.98]"
+                className="w-full py-4 px-6 rounded-xl font-bold text-sm uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg bg-[#FAF7F2] hover:bg-white text-[#1C1714] active:scale-[0.98] cursor-pointer"
               >
                 <span>{singleTariff.ctaText}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               <div className="text-center text-[11px] mt-3 text-white/70">
-                Моментальное открытие доступа в личный кабинет сразу после оплаты
+                Моментальное открытие доступа в Telegram-канал сразу после оплаты
+              </div>
+
+              {/* Official Robokassa FormSS embedded widget */}
+              <div className="mt-5 pt-4 border-t border-white/15 flex flex-col items-center justify-center">
+                <span className="text-[11px] uppercase tracking-wider text-white/80 font-semibold mb-2">
+                  Быстрая оплата картой или СБП через Robokassa:
+                </span>
+                <div className="w-[280px] h-[70px] overflow-hidden flex items-center justify-center bg-transparent">
+                  <iframe
+                    src={ROBOKASSA_CONFIG.iframeSrc}
+                    width="280"
+                    height="70"
+                    style={{
+                      border: 0,
+                      width: '280px',
+                      height: '70px',
+                      overflow: 'hidden',
+                      backgroundColor: 'transparent'
+                    }}
+                    title="Официальная форма оплаты Robokassa"
+                  />
+                </div>
               </div>
             </div>
 
@@ -153,12 +176,12 @@ export default function TariffsSection({ onSelectTariff }: TariffsSectionProps) 
           <div className="flex items-center gap-3">
             <ShieldCheck className="w-6 h-6 text-[#886C56] shrink-0" />
             <div>
-              <strong className="text-[#1C1714] block">Безопасная оплата картами РФ / СБП / Тинькофф</strong>
-              <span>Мгновенный чек об оплате отправляется вам на почту и в Telegram.</span>
+              <strong className="text-[#1C1714] block">Официальная оплата через платежный сервис Robokassa</strong>
+              <span>Банковские карты МИР, Visa, Mastercard, СБП. Электронный чек отправляется на email.</span>
             </div>
           </div>
           <span className="text-[11px] font-semibold text-[#886C56] bg-white px-3 py-1.5 rounded-lg border border-[#D8C7B5] whitespace-nowrap">
-            Чек и гарантия
+            Robokassa • Чек и гарантия
           </span>
         </div>
 

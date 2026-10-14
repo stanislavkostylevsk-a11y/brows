@@ -91,10 +91,14 @@ export default function Hero({ onOpenOrder, onOpenDirectChat }: HeroProps) {
             </div>
 
             {/* Trust and Guarantee indicator */}
-            <div className="flex items-center justify-center gap-4 text-xs text-[#665040] mx-auto">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs text-[#665040] mx-auto">
               <div className="flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-[#886C56]" />
-                <span>Четкий план действий и проверенный алгоритм</span>
+                <span>Четкий пошаговый алгоритм</span>
+              </div>
+              <span className="hidden sm:inline text-[#D8C7B5]">•</span>
+              <div className="flex items-center gap-1.5 text-[#251D17]">
+                <span>Оплата Robokassa (СБП, Карты РФ)</span>
               </div>
             </div>
           </div>

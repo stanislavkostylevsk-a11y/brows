@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, Check, Sparkles, ShieldCheck, Instagram, MessageCircle, Send, ArrowRight, BookOpen, Video, Smartphone } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Check, Sparkles, ShieldCheck, Instagram, Send, ArrowRight, BookOpen, Video, CreditCard } from 'lucide-react';
 import { TARIFFS, AUTHOR_INFO } from '../data/courseData';
+import { ROBOKASSA_CONFIG } from '../services/robokassa';
 import Logo from './Logo';
 
 interface OrderModalProps {
@@ -29,13 +30,15 @@ export default function OrderModal({ isOpen, onClose, onOpenLegal }: OrderModalP
 
     setIsSubmitting(true);
 
-    // Realistic order processing simulation
+    const generatedOrder = 'AM-' + Math.floor(100000 + Math.random() * 900000);
+    setOrderNumber(generatedOrder);
+
     setTimeout(() => {
-      const generatedOrder = 'AM-' + Math.floor(100000 + Math.random() * 900000);
-      setOrderNumber(generatedOrder);
       setIsSubmitting(false);
       setIsSuccess(true);
-    }, 900);
+      // Open Robokassa payment invoice for the user
+      window.open(ROBOKASSA_CONFIG.directPaymentUrl, '_blank');
+    }, 600);
   };
 
   const handleMessengerCheckout = (platform: 'instagram' | 'telegram') => {
@@ -113,20 +116,31 @@ export default function OrderModal({ isOpen, onClose, onOpenLegal }: OrderModalP
                 </div>
               </div>
 
-              <div className="pt-2 flex flex-col gap-2">
+              <div className="pt-2 flex flex-col gap-2.5">
+                <a
+                  href={ROBOKASSA_CONFIG.directPaymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3.5 px-4 rounded-xl bg-[#1C1714] hover:bg-[#322A24] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+                >
+                  <CreditCard className="w-4 h-4 text-[#E07A5F]" />
+                  <span>Перейти к защищенной оплате Robokassa • 1 490 ₽</span>
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+
                 <a
                   href={AUTHOR_INFO.telegramUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-3.5 px-4 rounded-xl bg-[#2AABEE] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:brightness-105 transition-all shadow-sm"
+                  className="w-full py-3 px-4 rounded-xl bg-[#2AABEE] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 hover:brightness-105 transition-all shadow-xs"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Перейти в закрытый Telegram-канал</span>
+                  <span>Открыть закрытый Telegram-канал</span>
                 </a>
 
                 <button
                   onClick={onClose}
-                  className="w-full py-3 px-4 rounded-xl bg-white border border-[#D8C7B5] text-[#251D17] text-xs font-semibold hover:bg-[#FAF7F2] transition-colors"
+                  className="w-full py-2.5 px-4 rounded-xl bg-white border border-[#D8C7B5] text-[#251D17] text-xs font-semibold hover:bg-[#FAF7F2] transition-colors"
                 >
                   Вернуться на сайт
                 </button>
@@ -239,18 +253,40 @@ export default function OrderModal({ isOpen, onClose, onOpenLegal }: OrderModalP
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-4 px-6 rounded-xl bg-[#1C1714] hover:bg-[#322A24] active:scale-[0.98] text-[#FAF7F2] font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+                className="w-full py-4 px-6 rounded-xl bg-[#1C1714] hover:bg-[#322A24] active:scale-[0.98] text-[#FAF7F2] font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
               >
                 {isSubmitting ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 text-[#E07A5F]" />
-                    <span>Оплатить {currentTariff.price.toLocaleString('ru-RU')} ₽ (Карта / СБП)</span>
+                    <span>Оплатить {currentTariff.price.toLocaleString('ru-RU')} ₽ через Robokassa</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
+
+              {/* Official Robokassa FormSS embedded widget */}
+              <div className="p-3.5 rounded-2xl bg-white border border-[#EAE1D7] flex flex-col items-center justify-center text-center">
+                <span className="text-[10px] uppercase tracking-wider text-[#886C56] font-semibold mb-1">
+                  Официальная форма быстрой оплаты Robokassa:
+                </span>
+                <div className="w-[280px] h-[70px] overflow-hidden flex items-center justify-center bg-transparent">
+                  <iframe
+                    src={ROBOKASSA_CONFIG.iframeSrc}
+                    width="280"
+                    height="70"
+                    style={{
+                      border: 0,
+                      width: '280px',
+                      height: '70px',
+                      overflow: 'hidden',
+                      backgroundColor: 'transparent'
+                    }}
+                    title="Официальная форма оплаты Robokassa"
+                  />
+                </div>
+              </div>
 
               {/* Alternative Instagram & Messenger Booking */}
               <div className="pt-2 border-t border-[#EAE1D7]">
