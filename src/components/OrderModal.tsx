@@ -281,27 +281,6 @@ export default function OrderModal({
                   <ArrowRight className="w-4 h-4" />
                 </a>
 
-                <div className="p-3 rounded-2xl bg-white border border-[#EAE1D7] flex flex-col items-center justify-center text-center">
-                  <span className="text-[10px] uppercase tracking-wider text-[#886C56] font-semibold mb-1">
-                    Или используйте кнопку быстрой оплаты Robokassa:
-                  </span>
-                  <div className="w-[280px] h-[70px] overflow-hidden flex items-center justify-center bg-transparent">
-                    <iframe
-                      src={ROBOKASSA_CONFIG.iframeSrc}
-                      width="280"
-                      height="70"
-                      style={{
-                        border: 0,
-                        width: '280px',
-                        height: '70px',
-                        overflow: 'hidden',
-                        backgroundColor: 'transparent',
-                      }}
-                      title="Официальная форма оплаты Robokassa"
-                    />
-                  </div>
-                </div>
-
                 <button
                   onClick={handleClose}
                   className="w-full py-2.5 px-4 rounded-xl bg-white border border-[#D8C7B5] text-[#251D17] text-xs font-semibold hover:bg-[#FAF7F2] transition-colors"
@@ -439,28 +418,6 @@ export default function OrderModal({
                   </>
                 )}
               </button>
-
-              {/* Official Robokassa FormSS embedded widget */}
-              <div className="p-3.5 rounded-2xl bg-white border border-[#EAE1D7] flex flex-col items-center justify-center text-center">
-                <span className="text-[10px] uppercase tracking-wider text-[#886C56] font-semibold mb-1">
-                  Официальная форма быстрой оплаты Robokassa:
-                </span>
-                <div className="w-[280px] h-[70px] overflow-hidden flex items-center justify-center bg-transparent">
-                  <iframe
-                    src={ROBOKASSA_CONFIG.iframeSrc}
-                    width="280"
-                    height="70"
-                    style={{
-                      border: 0,
-                      width: '280px',
-                      height: '70px',
-                      overflow: 'hidden',
-                      backgroundColor: 'transparent',
-                    }}
-                    title="Официальная форма оплаты Robokassa"
-                  />
-                </div>
-              </div>
 
               {/* Alternative Instagram & Messenger Booking */}
               <div className="pt-2 border-t border-[#EAE1D7]">
