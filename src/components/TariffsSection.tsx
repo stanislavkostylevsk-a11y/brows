@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Check, Sparkles, Clock, ShieldCheck, ArrowRight, Send, BookOpen, Video } from 'lucide-react';
 import { TARIFFS } from '../data/courseData';
-import { ROBOKASSA_CONFIG } from '../services/robokassa';
 import Logo from './Logo';
 
 interface TariffsSectionProps {
@@ -143,28 +142,6 @@ export default function TariffsSection({ onSelectTariff }: TariffsSectionProps) 
               </button>
               <div className="text-center text-[11px] mt-3 text-white/70">
                 Моментальное открытие доступа в Telegram-канал сразу после оплаты
-              </div>
-
-              {/* Official Robokassa FormSS embedded widget */}
-              <div className="mt-5 pt-4 border-t border-white/15 flex flex-col items-center justify-center">
-                <span className="text-[11px] uppercase tracking-wider text-white/80 font-semibold mb-2">
-                  Быстрая оплата картой или СБП через Robokassa:
-                </span>
-                <div className="w-[280px] h-[70px] overflow-hidden flex items-center justify-center bg-transparent">
-                  <iframe
-                    src={ROBOKASSA_CONFIG.iframeSrc}
-                    width="280"
-                    height="70"
-                    style={{
-                      border: 0,
-                      width: '280px',
-                      height: '70px',
-                      overflow: 'hidden',
-                      backgroundColor: 'transparent'
-                    }}
-                    title="Официальная форма оплаты Robokassa"
-                  />
-                </div>
               </div>
             </div>
 

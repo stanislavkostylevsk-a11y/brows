@@ -23,13 +23,113 @@ export const ROBOKASSA_CONFIG = {
   currency: 'RUB',
 };
 
+export interface PendingOrderData {
+  orderNumber: string;
+  name: string;
+  phone: string;
+  email: string;
+  tariffId?: string;
+  amount?: number;
+}
+
+export interface OrderStatusResponse {
+  orderNumber: string;
+  status: 'pending' | 'paid';
+  email: string;
+  emailSent: boolean;
+  emailDelivered: boolean;
+  telegramChannelUrl?: string;
+}
+
+export interface ConfirmSuccessPayload {
+  outSum?: string;
+  invId?: string;
+  signatureValue?: string;
+  shpParams?: Record<string, string>;
+  orderNumber?: string;
+  email?: string;
+  name?: string;
+}
+
+export interface ConfirmSuccessResponse {
+  success: boolean;
+  alreadySent?: boolean;
+  emailSent: boolean;
+  emailDelivered: boolean;
+  email: string;
+  orderNumber: string;
+  telegramChannelUrl: string;
+}
+
+const PENDING_ORDER_KEY = 'amaliya_pending_order';
+
+export function savePendingOrderLocal(order: PendingOrderData): void {
+  try {
+    localStorage.setItem(PENDING_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    // Ignore storage quota / privacy mode errors
+  }
+}
+
+export function getPendingOrderLocal(): PendingOrderData | null {
+  try {
+    const raw = localStorage.getItem(PENDING_ORDER_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PendingOrderData;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingOrderLocal(): void {
+  try {
+    localStorage.removeItem(PENDING_ORDER_KEY);
+  } catch {
+    // Ignore
+  }
+}
+
+export async function registerPendingOrder(
+  order: PendingOrderData
+): Promise<{ success: boolean; orderNumber: string }> {
+  savePendingOrderLocal(order);
+  const res = await fetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(order),
+  });
+  if (!res.ok) {
+    throw new Error('Не удалось зарегистрировать заказ');
+  }
+  return res.json();
+}
+
+export async function fetchOrderStatus(
+  orderNumber: string
+): Promise<OrderStatusResponse | null> {
+  const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/status`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function confirmRobokassaSuccess(
+  payload: ConfirmSuccessPayload
+): Promise<ConfirmSuccessResponse> {
+  const res = await fetch('/api/robokassa/confirm-success', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Не удалось подтвердить оплату');
+  }
+  return res.json();
+}
+
 /**
  * Перенаправляет пользователя на официальную защищенную страницу оплаты Robokassa
  */
 export function redirectToRobokassaPayment(): void {
-  try {
-    window.location.href = ROBOKASSA_CONFIG.directPaymentUrl;
-  } catch {
-    window.open(ROBOKASSA_CONFIG.directPaymentUrl, '_blank');
-  }
+  window.location.href = ROBOKASSA_CONFIG.directPaymentUrl;
 }

@@ -1,8 +1,18 @@
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import {
+  sendCourseAccessEmail,
+  PRIVATE_TELEGRAM_CHANNEL_URL,
+} from "./server/emailService";
+import {
+  upsertPendingOrder,
+  findOrder,
+  markOrderPaid,
+} from "./server/orderStore";
 
 dotenv.config();
 
@@ -10,6 +20,7 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 
 // Lazy init Gemini SDK
 function getGeminiClient() {
@@ -162,6 +173,313 @@ app.post("/api/ask-zhdan", async (req, res) => {
   } catch (error: any) {
     console.error("Ask Zhdan error:", error);
     res.status(500).json({ error: error.message || "Failed to talk to Zhdan" });
+  }
+});
+
+// Helper: verify Robokassa signature (MD5 / SHA256 / etc.)
+function verifyRobokassaSignature(params: {
+  outSum: string;
+  invId: string;
+  password: string;
+  signatureValue: string;
+  shpParams: Record<string, string>;
+}): boolean {
+  const algo = (process.env.ROBOKASSA_HASH_ALGO || "md5").toLowerCase();
+  const sortedShpKeys = Object.keys(params.shpParams)
+    .filter((k) => k.toLowerCase().startsWith("shp_"))
+    .sort((a, b) => a.localeCompare(b));
+
+  const shpSuffix = sortedShpKeys
+    .map((k) => `:${k}=${params.shpParams[k]}`)
+    .join("");
+
+  const baseString = `${params.outSum}:${params.invId}:${params.password}${shpSuffix}`;
+  const expected = crypto
+    .createHash(algo)
+    .update(baseString, "utf8")
+    .digest("hex")
+    .toUpperCase();
+
+  return expected === params.signatureValue.trim().toUpperCase();
+}
+
+function getParamCaseInsensitive(
+  source: Record<string, unknown>,
+  key: string
+): string {
+  const lower = key.toLowerCase();
+  for (const [k, v] of Object.entries(source)) {
+    if (k.toLowerCase() === lower && v !== undefined && v !== null) {
+      return String(v).trim();
+    }
+  }
+  return "";
+}
+
+function extractShpParams(
+  source: Record<string, unknown>
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [k, v] of Object.entries(source)) {
+    if (k.toLowerCase().startsWith("shp_") && v !== undefined && v !== null) {
+      result[k] = String(v);
+    }
+  }
+  return result;
+}
+
+// 1. Register pending order before redirecting buyer to Robokassa
+app.post("/api/orders", (req, res) => {
+  try {
+    const { orderNumber, name, phone, email, tariffId, amount } = req.body || {};
+    const cleanEmail = typeof email === "string" ? email.trim() : "";
+    const cleanName = typeof name === "string" ? name.trim() : "";
+    const cleanPhone = typeof phone === "string" ? phone.trim() : "";
+
+    if (!cleanName || !cleanPhone || !cleanEmail || !cleanEmail.includes("@")) {
+      res.status(400).json({
+        error: "Необходимо указать имя, телефон и корректный email",
+      });
+      return;
+    }
+
+    const finalOrderNumber =
+      typeof orderNumber === "string" && orderNumber.trim()
+        ? orderNumber.trim()
+        : `AM-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const order = upsertPendingOrder({
+      orderNumber: finalOrderNumber,
+      name: cleanName,
+      phone: cleanPhone,
+      email: cleanEmail,
+      tariffId: tariffId || "solo",
+      amount: typeof amount === "number" ? amount : 1490,
+    });
+
+    res.json({
+      success: true,
+      orderNumber: order.orderNumber,
+      status: order.status,
+    });
+  } catch (error: unknown) {
+    console.error("Create order error:", error);
+    res.status(500).json({ error: "Не удалось сохранить заказ" });
+  }
+});
+
+// 2. Check order payment & email status (safe, never leaks private channel link until paid)
+app.get("/api/orders/:orderNumber/status", (req, res) => {
+  const order = findOrder({ orderNumber: req.params.orderNumber });
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+
+  res.json({
+    orderNumber: order.orderNumber,
+    status: order.status,
+    email: order.email,
+    emailSent: Boolean(order.emailSentAt),
+    emailDelivered: Boolean(order.emailDelivered),
+    telegramChannelUrl:
+      order.status === "paid" ? PRIVATE_TELEGRAM_CHANNEL_URL : undefined,
+  });
+});
+
+// 3. Robokassa ResultURL webhook (GET or POST)
+app.all("/api/robokassa/result", async (req, res) => {
+  try {
+    const payload: Record<string, unknown> = {
+      ...(req.query || {}),
+      ...(req.body && typeof req.body === "object" ? req.body : {}),
+    };
+
+    const outSum = getParamCaseInsensitive(payload, "OutSum");
+    const invId = getParamCaseInsensitive(payload, "InvId");
+    const signatureValue = getParamCaseInsensitive(payload, "SignatureValue");
+    const robokassaEmail = getParamCaseInsensitive(payload, "EMail");
+    const shpParams = extractShpParams(payload);
+    const shpEmail = getParamCaseInsensitive(shpParams, "Shp_email");
+    const shpOrder = getParamCaseInsensitive(shpParams, "Shp_order");
+    const shpName = getParamCaseInsensitive(shpParams, "Shp_name");
+
+    const password2 = process.env.ROBOKASSA_PASSWORD_2;
+    if (password2) {
+      if (
+        !outSum ||
+        !invId ||
+        !signatureValue ||
+        !verifyRobokassaSignature({
+          outSum,
+          invId,
+          password: password2,
+          signatureValue,
+          shpParams,
+        })
+      ) {
+        console.warn("[Robokassa ResultURL] Invalid signature:", {
+          outSum,
+          invId,
+        });
+        res.status(400).send("bad sign");
+        return;
+      }
+    }
+
+    const existingOrder = findOrder({
+      orderNumber: shpOrder || undefined,
+      invId: invId || undefined,
+      email: robokassaEmail || shpEmail || undefined,
+    });
+
+    const recipientEmail =
+      robokassaEmail || shpEmail || existingOrder?.email || "";
+    const buyerName = shpName || existingOrder?.name || "";
+
+    if (existingOrder?.status === "paid" && existingOrder.emailDelivered) {
+      res.status(200).send(`OK${invId}`);
+      return;
+    }
+
+    if (recipientEmail) {
+      const emailResult = await sendCourseAccessEmail({
+        to: recipientEmail,
+        buyerName,
+        orderNumber: existingOrder?.orderNumber || invId,
+      });
+
+      markOrderPaid({
+        orderNumber: existingOrder?.orderNumber || shpOrder || undefined,
+        invId: invId || undefined,
+        email: recipientEmail,
+        name: buyerName,
+        outSum: outSum || undefined,
+        emailDelivered: emailResult.delivered,
+        emailProvider: emailResult.provider,
+        emailError: emailResult.error,
+      });
+    } else {
+      console.warn(
+        `[Robokassa ResultURL] Payment confirmed (InvId=${invId}) without buyer email`
+      );
+    }
+
+    res.status(200).send(`OK${invId}`);
+  } catch (error: unknown) {
+    console.error("[Robokassa ResultURL] Error:", error);
+    res.status(500).send("error");
+  }
+});
+
+// 4. Robokassa SuccessURL redirect confirmation (called by client after return from Robokassa)
+app.post("/api/robokassa/confirm-success", async (req, res) => {
+  try {
+    const {
+      outSum,
+      invId,
+      signatureValue,
+      shpParams,
+      orderNumber,
+      email,
+      name,
+    } = req.body || {};
+
+    const cleanOutSum = typeof outSum === "string" ? outSum.trim() : "";
+    const cleanInvId = typeof invId === "string" ? invId.trim() : "";
+    const cleanSig =
+      typeof signatureValue === "string" ? signatureValue.trim() : "";
+    const cleanOrderNumber =
+      typeof orderNumber === "string" ? orderNumber.trim() : "";
+    const cleanEmail = typeof email === "string" ? email.trim() : "";
+    const cleanName = typeof name === "string" ? name.trim() : "";
+
+    const password1 = process.env.ROBOKASSA_PASSWORD_1;
+    if (password1 && cleanSig && cleanOutSum && cleanInvId) {
+      const valid = verifyRobokassaSignature({
+        outSum: cleanOutSum,
+        invId: cleanInvId,
+        password: password1,
+        signatureValue: cleanSig,
+        shpParams:
+          shpParams && typeof shpParams === "object" ? shpParams : {},
+      });
+      if (!valid) {
+        res.status(400).json({ error: "Некорректная подпись платежа" });
+        return;
+      }
+    }
+
+    const existingOrder = findOrder({
+      orderNumber: cleanOrderNumber || undefined,
+      invId: cleanInvId || undefined,
+      email: cleanEmail || undefined,
+    });
+
+    const hasRobokassaParams = Boolean(cleanInvId && cleanOutSum);
+    const hasRegisteredOrder = Boolean(existingOrder);
+
+    if (!hasRobokassaParams && !hasRegisteredOrder) {
+      res.status(400).json({
+        error: "Не найдены данные подтвержденного заказа",
+      });
+      return;
+    }
+
+    const recipientEmail = cleanEmail || existingOrder?.email || "";
+    const buyerName = cleanName || existingOrder?.name || "";
+
+    if (!recipientEmail) {
+      res.status(400).json({
+        error: "Не указан email покупателя для отправки доступа",
+      });
+      return;
+    }
+
+    // Avoid sending duplicate emails if ResultURL already delivered it
+    if (existingOrder?.status === "paid" && existingOrder.emailDelivered) {
+      res.json({
+        success: true,
+        alreadySent: true,
+        emailSent: true,
+        emailDelivered: true,
+        email: recipientEmail,
+        orderNumber: existingOrder.orderNumber,
+        telegramChannelUrl: PRIVATE_TELEGRAM_CHANNEL_URL,
+      });
+      return;
+    }
+
+    const emailResult = await sendCourseAccessEmail({
+      to: recipientEmail,
+      buyerName,
+      orderNumber: existingOrder?.orderNumber || cleanInvId || cleanOrderNumber,
+    });
+
+    const updatedOrder = markOrderPaid({
+      orderNumber: existingOrder?.orderNumber || cleanOrderNumber || undefined,
+      invId: cleanInvId || undefined,
+      email: recipientEmail,
+      name: buyerName,
+      outSum: cleanOutSum || undefined,
+      emailDelivered: emailResult.delivered,
+      emailProvider: emailResult.provider,
+      emailError: emailResult.error,
+    });
+
+    res.json({
+      success: true,
+      alreadySent: false,
+      emailSent: true,
+      emailDelivered: emailResult.delivered,
+      provider: emailResult.provider,
+      email: updatedOrder.email,
+      orderNumber: updatedOrder.orderNumber,
+      telegramChannelUrl: PRIVATE_TELEGRAM_CHANNEL_URL,
+    });
+  } catch (error: unknown) {
+    console.error("[Robokassa ConfirmSuccess] Error:", error);
+    res.status(500).json({ error: "Ошибка подтверждения оплаты" });
   }
 });
 

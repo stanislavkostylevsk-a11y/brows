@@ -8,14 +8,21 @@ import AuthorSection from "./components/AuthorSection";
 import FaqSection from "./components/FaqSection";
 import Footer from "./components/Footer";
 import StickyMobileBar from "./components/StickyMobileBar";
-import OrderModal from "./components/OrderModal";
+import OrderModal, { PaymentSuccessState } from "./components/OrderModal";
 import DirectChatModal from "./components/DirectChatModal";
 import VideoIntroModal from "./components/VideoIntroModal";
 import { LegalModal, LegalTabType } from "./components/LegalModal";
+import {
+  confirmRobokassaSuccess,
+  getPendingOrderLocal,
+  clearPendingOrderLocal,
+} from "./services/robokassa";
 
 export default function App() {
   const [isOrderOpen, setIsOrderOpen] = useState(false);
   const [selectedTariffId, setSelectedTariffId] = useState<string>("solo");
+  const [paymentSuccessState, setPaymentSuccessState] =
+    useState<PaymentSuccessState | null>(null);
   const [isDirectChatOpen, setIsDirectChatOpen] = useState(false);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [isLegalOpen, setIsLegalOpen] = useState(false);
@@ -31,7 +38,7 @@ export default function App() {
     setIsLegalOpen(true);
   };
 
-  // Listen to hash changes for direct deep linking (#order, #faq, #offer, #refund, #privacy)
+  // Listen to hash changes for direct deep linking (#order, #faq, #offer, #refund, #privacy, #payment-success)
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash.toLowerCase();
@@ -52,6 +59,71 @@ export default function App() {
     handleHash();
     window.addEventListener("hashchange", handleHash);
     return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
+  // Handle Robokassa SuccessURL redirect (?payment=success or ?InvId=...&OutSum=... or #payment-success)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.toLowerCase();
+
+    const getQueryCaseInsensitive = (key: string) => {
+      const target = key.toLowerCase();
+      for (const [k, v] of params.entries()) {
+        if (k.toLowerCase() === target) return v;
+      }
+      return "";
+    };
+
+    const paymentParam = getQueryCaseInsensitive("payment").toLowerCase();
+    const invId = getQueryCaseInsensitive("InvId");
+    const outSum = getQueryCaseInsensitive("OutSum");
+    const signatureValue = getQueryCaseInsensitive("SignatureValue");
+
+    const isSuccessReturn =
+      paymentParam === "success" ||
+      hash === "#payment-success" ||
+      Boolean(invId && outSum);
+
+    if (!isSuccessReturn) return;
+
+    const shpParams: Record<string, string> = {};
+    for (const [k, v] of params.entries()) {
+      if (k.toLowerCase().startsWith("shp_")) {
+        shpParams[k] = v;
+      }
+    }
+
+    const pendingOrder = getPendingOrderLocal();
+
+    confirmRobokassaSuccess({
+      outSum: outSum || undefined,
+      invId: invId || undefined,
+      signatureValue: signatureValue || undefined,
+      shpParams,
+      orderNumber: pendingOrder?.orderNumber || shpParams["Shp_order"],
+      email:
+        pendingOrder?.email ||
+        getQueryCaseInsensitive("EMail") ||
+        shpParams["Shp_email"],
+      name: pendingOrder?.name || shpParams["Shp_name"],
+    })
+      .then((data) => {
+        clearPendingOrderLocal();
+        setPaymentSuccessState({
+          orderNumber: data.orderNumber,
+          email: data.email,
+          emailDelivered: data.emailDelivered,
+          telegramChannelUrl: data.telegramChannelUrl,
+        });
+        setIsOrderOpen(true);
+
+        // Clean URL parameters after confirming
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      })
+      .catch((err) => {
+        console.error("Failed to confirm Robokassa success:", err);
+      });
   }, []);
 
   return (
@@ -102,9 +174,13 @@ export default function App() {
       {/* Order & Payment Modal */}
       <OrderModal
         isOpen={isOrderOpen}
-        onClose={() => setIsOrderOpen(false)}
+        onClose={() => {
+          setIsOrderOpen(false);
+          setPaymentSuccessState(null);
+        }}
         initialTariffId={selectedTariffId}
         onOpenLegal={handleOpenLegal}
+        paymentSuccessState={paymentSuccessState}
       />
 
       {/* Direct Chat / Consultation in Telegram Modal */}
