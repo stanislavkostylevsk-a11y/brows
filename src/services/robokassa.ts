@@ -93,15 +93,25 @@ export async function registerPendingOrder(
   order: PendingOrderData
 ): Promise<{ success: boolean; orderNumber: string }> {
   savePendingOrderLocal(order);
-  const res = await fetch('/api/orders', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(order),
-  });
-  if (!res.ok) {
-    throw new Error('Не удалось зарегистрировать заказ');
+  try {
+    const res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(order),
+    });
+    if (res.status === 400) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Проверьте корректность введенных данных');
+    }
+    if (res.ok) {
+      return res.json();
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Проверьте')) {
+      throw err;
+    }
   }
-  return res.json();
+  return { success: true, orderNumber: order.orderNumber };
 }
 
 export async function fetchOrderStatus(

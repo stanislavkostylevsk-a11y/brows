@@ -176,7 +176,7 @@ app.post("/api/ask-zhdan", async (req, res) => {
   }
 });
 
-// Helper: verify Robokassa signature (MD5 / SHA256 / etc.)
+// Helper: verify Robokassa signature (MD5 / SHA1 / SHA256 / SHA512)
 function verifyRobokassaSignature(params: {
   outSum: string;
   invId: string;
@@ -184,7 +184,15 @@ function verifyRobokassaSignature(params: {
   signatureValue: string;
   shpParams: Record<string, string>;
 }): boolean {
-  const algo = (process.env.ROBOKASSA_HASH_ALGO || "md5").toLowerCase();
+  const cleanSig = params.signatureValue.trim().toUpperCase();
+  let algo = (process.env.ROBOKASSA_HASH_ALGO || "").toLowerCase();
+  if (!algo) {
+    if (cleanSig.length === 64) algo = "sha256";
+    else if (cleanSig.length === 40) algo = "sha1";
+    else if (cleanSig.length === 128) algo = "sha512";
+    else algo = "md5";
+  }
+
   const sortedShpKeys = Object.keys(params.shpParams)
     .filter((k) => k.toLowerCase().startsWith("shp_"))
     .sort((a, b) => a.localeCompare(b));
@@ -200,7 +208,7 @@ function verifyRobokassaSignature(params: {
     .digest("hex")
     .toUpperCase();
 
-  return expected === params.signatureValue.trim().toUpperCase();
+  return expected === cleanSig;
 }
 
 function getParamCaseInsensitive(

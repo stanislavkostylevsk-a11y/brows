@@ -176,10 +176,21 @@ export async function sendCourseAccessEmail(
   }
 
   // 2. Try SMTP via nodemailer if configured
-  const smtpHost = process.env.SMTP_HOST;
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
   const smtpUrl = process.env.SMTP_URL;
+
+  let smtpHost = process.env.SMTP_HOST;
+  if (!smtpHost && smtpUser) {
+    const domain = smtpUser.split("@")[1]?.toLowerCase() || "";
+    if (["mail.ru", "bk.ru", "list.ru", "inbox.ru"].includes(domain)) {
+      smtpHost = "smtp.mail.ru";
+    } else if (["yandex.ru", "yandex.com", "ya.ru"].includes(domain)) {
+      smtpHost = "smtp.yandex.ru";
+    } else if (domain === "gmail.com") {
+      smtpHost = "smtp.gmail.com";
+    }
+  }
 
   if (smtpUrl || (smtpHost && smtpUser && smtpPass)) {
     try {
