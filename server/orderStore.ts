@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 
 export type OrderStatus = "pending" | "paid";
 
@@ -21,19 +22,31 @@ export interface CourseOrder {
   emailError?: string;
 }
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
+function getOrdersFilePath(): string {
+  const preferredDir = path.join(process.cwd(), ".data");
+  try {
+    if (!fs.existsSync(preferredDir)) {
+      fs.mkdirSync(preferredDir, { recursive: true });
+    }
+    fs.accessSync(preferredDir, fs.constants.W_OK);
+    return path.join(preferredDir, "orders.json");
+  } catch {
+    const tmpDir = path.join(os.tmpdir(), "amaliya-brows-data");
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    return path.join(tmpDir, "orders.json");
+  }
+}
 
 function ensureStore(): CourseOrder[] {
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(ORDERS_FILE)) {
-      fs.writeFileSync(ORDERS_FILE, "[]", "utf8");
+    const ordersFile = getOrdersFilePath();
+    if (!fs.existsSync(ordersFile)) {
+      fs.writeFileSync(ordersFile, "[]", "utf8");
       return [];
     }
-    const raw = fs.readFileSync(ORDERS_FILE, "utf8");
+    const raw = fs.readFileSync(ordersFile, "utf8");
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
@@ -44,10 +57,8 @@ function ensureStore(): CourseOrder[] {
 
 function saveStore(orders: CourseOrder[]): void {
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), "utf8");
+    const ordersFile = getOrdersFilePath();
+    fs.writeFileSync(ordersFile, JSON.stringify(orders, null, 2), "utf8");
   } catch (err) {
     console.error("[OrderStore] Failed to write orders file:", err);
   }
